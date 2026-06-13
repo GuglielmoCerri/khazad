@@ -1,7 +1,7 @@
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/logo-dark.png">
-  <img alt="Khazad Logo" src="docs/_static/logo-light.png" width="280px">
+  <img alt="Khazad Logo" src="docs/_static/logo-light.png" width="360px">
 </picture>
 </p>
 <h2 align="center">Khazad — You shall not pass.</h2>
