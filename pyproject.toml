@@ -1,0 +1,111 @@
+[project]
+name = "khazad"
+version = "0.1.0"
+description = "Transparent, transport-layer semantic cache for LLM API calls using Redis 8 Vector Sets"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Guglielmo Cerri", email = "cerriguglielmo@gmail.com" }
+]
+requires-python = ">=3.10"
+keywords = ["llm", "cache", "semantic-cache", "redis", "vector", "openai", "anthropic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "redis>=8.0.0,<9",
+    "httpx>=0.27.0",
+    "sentence-transformers>=3.0.0",
+]
+
+[project.optional-dependencies]
+openai-embeddings = ["openai>=1.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/GuglielmoCerri/khazad"
+Repository = "https://github.com/GuglielmoCerri/khazad"
+Issues = "https://github.com/GuglielmoCerri/khazad/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["khazad"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 99
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "RUF",  # ruff-specific rules
+    "PT",   # flake8-pytest-style
+    "RET",  # flake8-return
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["khazad"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "B011",   # assert False — fine in tests
+    "PT011",  # broad pytest.raises — sometimes intentional
+    "PT004",  # fixture name leading underscore — used for autouse cleanup
+    "PT012",  # multi-statement pytest.raises
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: marks tests requiring Redis (deselect with '-m \"not integration\"')",
+    "stress: marks stress/performance tests (deselect with '-m \"not stress\"')",
+]
+
+[tool.coverage.run]
+source = ["khazad"]
+branch = true
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+show_missing = true
+skip_covered = false
