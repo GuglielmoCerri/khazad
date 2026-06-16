@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `hosts` opt-in allowlist (exact hosts and `*.` wildcard subdomains) — restricts interception to explicitly listed endpoints.
+- `CacheScope` enum (`MODEL` / `HOST`) exported from the package, controlling how cache entries are partitioned within a provider host.
+
+### Changed
+- Replaced the `shared_models: bool` flag with `cache_scope: CacheScope` (`CacheScope.MODEL` by default; `CacheScope.HOST` shares one cache across a provider's models). The string values `"model"` / `"host"` are also accepted. `shared_models=True` becomes `cache_scope="host"`.
 
 ## [0.1.0] - 2026-06-10
 

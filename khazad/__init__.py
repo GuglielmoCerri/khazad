@@ -22,12 +22,13 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from khazad._models import CacheHit, ParsedRequest, Stats
+from khazad._models import CacheHit, CacheScope, ParsedRequest, Stats
 from khazad.khazad import Khazad
 
 __version__ = "0.1.0"
 __all__ = [
     "CacheHit",
+    "CacheScope",
     "Khazad",
     "ParsedRequest",
     "Stats",
@@ -54,6 +55,7 @@ def init(
     embedding_model: str = "redis/langcache-embed-v2",
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO",
     hosts: list[str] | None = None,
+    cache_scope: CacheScope | Literal["model", "host"] = CacheScope.MODEL,
 ) -> None:
     """Activate the global Khazad singleton."""
     global _instance
@@ -71,6 +73,7 @@ def init(
         embedding_model=embedding_model,
         log_level=log_level,
         hosts=hosts,
+        cache_scope=cache_scope,
     )
 
 

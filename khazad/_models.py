@@ -3,6 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class CacheScope(str, Enum):
+    """How cache entries are partitioned within a provider host.
+
+    The provider host is always part of the scope, so a cached response is
+    never replayed across providers. This enum only controls whether the
+    **model** is also part of the key.
+
+    - :attr:`MODEL` (default) — each ``(host, model)`` pair gets its own vector
+      set, so a ``gpt-4o`` answer is never served to a ``gpt-4o-mini`` call.
+    - :attr:`HOST` — every model or deployment on the same provider shares one
+      vector set. Safe only for format-compatible pools (e.g. several Azure
+      OpenAI deployments, or treating ``gpt-4o`` and ``gpt-4o-mini`` as
+      interchangeable).
+
+    Members are also plain strings, so ``"model"`` / ``"host"`` are accepted
+    anywhere a :class:`CacheScope` is expected.
+    """
+
+    MODEL = "model"
+    HOST = "host"
 
 
 @dataclass(frozen=True, slots=True)

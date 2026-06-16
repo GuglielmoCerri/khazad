@@ -61,6 +61,15 @@ so the same prompt sent to `gpt-4o` and `gpt-4o-mini` can never cross-serve.
 The prompt text embedded is the **full conversation** (`role: text` lines, including
 system), not just the last user message — prevents multi-turn collisions.
 
+The opt-in `cache_scope` parameter (a `CacheScope` enum — `MODEL` by default, `HOST`
+to opt in; keyword-only on `Khazad`, also on `khazad.init`) controls this. Pass
+`cache_scope=CacheScope.HOST` (or the string `"host"`) to collapse the scope to `host`
+only, so every model/deployment on the same provider shares one vector set. The host
+always stays in the scope, so different providers (Azure OpenAI vs Gemini) remain
+isolated and a response is never replayed to a client expecting a different wire
+format. Use it only for format-compatible pools (e.g. several Azure OpenAI
+deployments, or `gpt-4o` + `gpt-4o-mini`).
+
 ### Hexagonal Architecture (Ports & Adapters)
 - **Ports** (`khazad/ports/`) — abstract interfaces: `Embedder`, `ProviderParser`, `VectorStore`
 - **Adapters** (`khazad/adapters/`) — concrete implementations (Redis, HuggingFace, OpenAI, parsers)

@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
-from khazad._models import CacheHit, Stats
+from khazad._models import CacheHit, CacheScope, Stats
 from khazad.adapters.parsers.anthropic import AnthropicParser
 from khazad.adapters.parsers.gemini import GeminiParser
 from khazad.adapters.parsers.openai import OpenAIParser
@@ -48,6 +48,13 @@ class Khazad:
         cache = Khazad(redis_url="redis://localhost:6379", threshold=0.92)
         # ... run your app ...
         cache.stop()
+
+    By default each ``(host, model)`` pair gets its own cache scope. Pass
+    ``cache_scope=CacheScope.HOST`` (or the string ``"host"``) to scope by host
+    only, so every model or deployment on the same provider shares one vector
+    set. This is safe only because the response format is identical within a
+    provider; different providers stay isolated because the scope always
+    includes the host.
     """
 
     def __init__(
@@ -61,6 +68,7 @@ class Khazad:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO",
         hosts: list[str] | None = None,
         *,
+        cache_scope: CacheScope | Literal["model", "host"] = CacheScope.MODEL,
         _vector_store: VectorStore | None = None,
         _embedder_instance: Embedder | None = None,
     ) -> None:
@@ -72,10 +80,15 @@ class Khazad:
             raise ValueError("hosts must be a non-empty list or None (None = all hosts)")
         if (_vector_store is None) != (_embedder_instance is None):
             raise ValueError("_vector_store and _embedder_instance must be provided together")
+        try:
+            cache_scope = CacheScope(cache_scope)
+        except ValueError:
+            raise ValueError("cache_scope must be 'model' or 'host'") from None
 
         self._threshold = threshold
         self._ttl = ttl
         self._hosts = None if hosts is None else {h.lower() for h in hosts}
+        self._cache_scope = cache_scope
         self._stats = Stats()
         self._lock = threading.Lock()
 
@@ -157,10 +170,15 @@ class Khazad:
         except Exception:
             self.logger.debug("[Khazad] Unparseable request to %s — passing through", request.url)
             return None
+        scope = (
+            request.url.host
+            if self._cache_scope is CacheScope.HOST
+            else f"{request.url.host}/{parsed.model or 'default'}"
+        )
         return PreparedRequest(
             parser=parser,
             prompt=parsed.prompt,
-            scope=f"{request.url.host}/{parsed.model or 'default'}",
+            scope=scope,
             stream=parsed.stream,
         )
 

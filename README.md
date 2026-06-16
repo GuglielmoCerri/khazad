@@ -1,7 +1,7 @@
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/logo-dark.png">
-  <img alt="Khazad Logo" src="docs/_static/logo-light.png" width="280px">
+  <img alt="Khazad Logo" src="docs/_static/logo-light.png" width="360px">
 </picture>
 </p>
 <h2 align="center">Khazad — You shall not pass.</h2>
@@ -34,7 +34,7 @@ embed prompt ──► Redis Vector Set (VSIM)
 
 Key properties:
 
-- **Model-aware** — each `(provider host, model)` pair gets its own vector set, so a `gpt-4o` answer is never served to a `gpt-4o-mini` call, no matter how similar the prompt.
+- **Model-aware** — each `(provider host, model)` pair gets its own vector set, so a `gpt-4o` answer is never served to a `gpt-4o-mini` call, no matter how similar the prompt. Set `cache_scope="host"` to scope by **provider host only**, letting every model or deployment on the same provider share one cache (different providers stay isolated — see [Configuration](#configuration)).
 - **Conversation-aware** — the whole message list (system, user, assistant) is embedded, not just the last user turn. Two different conversations ending with the same follow-up question ("What about its population?") never collide.
 - **Streaming both ways** — cache hits replay as real SSE streams (sync and async clients); cache misses that stream are captured chunk-by-chunk with no added latency and reassembled into a canonical JSON response, so a streamed answer can later serve a non-streamed request and vice versa. Aborted streams are never cached.
 
@@ -147,32 +147,43 @@ Matches `*/chat/completions` and `*/responses` paths. Streaming requests also ca
 </details>
 
 <details>
-<summary><b>Azure OpenAI</b> — Azure deployments via <code>OpenAI</code> SDK</summary>
+<summary><b>Azure OpenAI</b> — Azure deployments with Entra ID auth via <code>AzureOpenAI</code> SDK</summary>
 
 ```python
 import os
 import time
 
-from openai import OpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from openai import AzureOpenAI
 
-from khazad import Khazad
+from khazad import CacheScope, Khazad
 
-cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90, log_level="DEBUG")
-
-# ENDPOINT example: https://<resource>.openai.azure.com/openai/deployments/<deployment>
-# DEPLOYMENT_NAME example: gpt-4.1
-client = OpenAI(
-    base_url=os.environ.get("ENDPOINT"),
-    api_key=os.environ.get("OPENAI_API_KEY"),
+cache = Khazad(
+    redis_url="redis://localhost:6379",
+    threshold=0.90,
+    cache_scope=CacheScope.HOST,
+    namespace="azure_openai_example",
 )
-deployment_name = os.environ.get("DEPLOYMENT_NAME") or "gpt-4.1"
 
-prompt = "What is the capital of Italy?"
+endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
+deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
+token_provider = get_bearer_token_provider(
+    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+)
+api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+
+client = AzureOpenAI(
+    api_version=api_version,
+    azure_endpoint=endpoint,
+    azure_ad_token_provider=token_provider,
+)
+
+prompt = "What is the capital of Spain?"
 
 for i in range(2):
     start = time.perf_counter()
     response = client.chat.completions.create(
-        model=deployment_name,
+        model=deployment,
         messages=[{"role": "user", "content": prompt}],
     )
     elapsed = (time.perf_counter() - start) * 1000
@@ -182,7 +193,7 @@ print(cache.get_stats().to_dict())
 cache.stop()
 ```
 
-Same example as [examples/azure_openai.py](examples/azure_openai.py). Works with the official `AzureOpenAI` client too — Khazad matches the path, not the host.
+Full example: [examples/azure_openai_identity.py](examples/azure_openai_identity.py). It authenticates with Microsoft Entra ID (`DefaultAzureCredential`) — no API key needed — and uses `cache_scope=CacheScope.HOST` so every deployment on the same Azure resource shares one cache. API-key auth works too: Khazad matches the request path (`/chat/completions`), not the auth method or host.
 
 </details>
 
@@ -260,7 +271,7 @@ cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90)
 client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
 response = client.models.generate_content(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     contents="What is the capital of Italy?",
 )
 print(response.text)
@@ -309,7 +320,7 @@ Semantic caching trades exactness for cost and latency. Know the trade before tu
 
 The module exposes five functions as the singleton API. The `Khazad` class exposes the same surface as instance methods (no `init` — instantiation does that).
 
-### `init(redis_url, threshold, ttl, namespace, embedder, embedding_model, log_level)`
+### `init(redis_url, threshold, ttl, namespace, embedder, embedding_model, log_level, hosts, cache_scope)`
 
 Activate the global singleton. Builds the embedder, connects to Redis, installs the `httpx` transport patch. **Required call before any LLM traffic.** Calling twice without `stop()` in between is a no-op (warns).
 
@@ -376,6 +387,7 @@ Khazad(
     embedding_model="redis/langcache-embed-v2",
     log_level="INFO",                    # DEBUG | INFO | WARNING | ERROR
     hosts=None,                          # Opt-in host allowlist (None = all hosts)
+    cache_scope="model",                 # "model" (default) or "host" (one cache per provider, ignore model)
 )
 ```
 
@@ -384,6 +396,16 @@ Khazad(
 ```python
 khazad.init(hosts=["api.openai.com", "*.openai.azure.com"])
 ```
+
+**`cache_scope` — share one cache across a provider's models.** Driven by the `CacheScope` enum (importable from `khazad`); the string values `"model"` and `"host"` are accepted too. By default (`CacheScope.MODEL`) each `(host, model)` pair gets its own vector set, so a `gpt-4o` answer never serves a `gpt-4o-mini` call. Set it to `CacheScope.HOST` to scope by **host only** — every model or deployment on the same provider then shares a single cache:
+
+```python
+from khazad import CacheScope
+
+khazad.init(cache_scope=CacheScope.HOST)   # or cache_scope="host"
+```
+
+The host always stays part of the scope, so different providers never mix (an Azure OpenAI response is never replayed to a Gemini client). Use it only for format-compatible pools — e.g. multiple Azure OpenAI deployments, or treating `gpt-4o` and `gpt-4o-mini` as interchangeable. The trade-off is semantic: a smaller model may serve an answer originally produced by a larger one.
 
 **Threshold guidance:**
 - `0.95+` — strict, near-identical prompts only
@@ -467,7 +489,7 @@ uv run python -m ruff check . --fix
 uv run python -m ruff format .
 
 # Smoke test against a real endpoint (requires Redis 8 + credentials)
-uv run python examples/azure_openai.py
+uv run python examples/azure_openai_identity.py
 ```
 
 ## License
