@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from khazad._models import CacheScope
 from khazad.khazad import Khazad
 from khazad.ports.embedder import Embedder
 from khazad.ports.store import VectorStore
@@ -292,10 +293,15 @@ def gemini_chat_response() -> bytes:
 def make_engine(fake_embedder, memory_store):
     """Factory fixture to create a Khazad instance with fake deps."""
 
-    def _make(threshold: float = 0.90, ttl: int | None = None) -> Khazad:
+    def _make(
+        threshold: float = 0.90,
+        ttl: int | None = None,
+        cache_scope: CacheScope | str = CacheScope.MODEL,
+    ) -> Khazad:
         return Khazad(
             threshold=threshold,
             ttl=ttl,
+            cache_scope=cache_scope,
             _vector_store=memory_store,
             _embedder_instance=fake_embedder,
         )

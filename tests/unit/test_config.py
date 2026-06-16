@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from khazad._models import CacheScope
 from khazad.khazad import Khazad
 
 
@@ -57,6 +58,10 @@ class TestKhazadDefaults:
         k = _make()
         assert k._ttl is None
 
+    def test_default_cache_scope_is_model(self):
+        k = _make()
+        assert k._cache_scope is CacheScope.MODEL
+
 
 class TestKhazadValidation:
     """Verify initialization validation rules."""
@@ -84,6 +89,18 @@ class TestKhazadValidation:
     def test_ttl_negative_rejected(self):
         with pytest.raises(ValueError):
             _make(ttl=-10)
+
+    def test_cache_scope_accepts_enum(self):
+        k = _make(cache_scope=CacheScope.HOST)
+        assert k._cache_scope is CacheScope.HOST
+
+    def test_cache_scope_accepts_string(self):
+        k = _make(cache_scope="host")
+        assert k._cache_scope is CacheScope.HOST
+
+    def test_invalid_cache_scope_rejected(self):
+        with pytest.raises(ValueError):
+            _make(cache_scope="banana")
 
     def test_custom_values(self):
         k = _make(threshold=0.95, ttl=3600)

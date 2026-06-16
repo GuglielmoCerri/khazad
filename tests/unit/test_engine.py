@@ -7,6 +7,7 @@ import json
 import httpx
 import pytest
 
+from khazad._models import CacheScope
 from khazad.khazad import Khazad
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
@@ -44,6 +45,38 @@ class TestPrepare:
         prepared = engine.prepare(req)
         assert prepared is not None
         assert prepared.scope == "api.openai.com/gpt-4"
+
+    def test_cache_scope_host_is_host_only(self, make_engine, openai_chat_body):
+        engine = make_engine(cache_scope=CacheScope.HOST)
+        req = httpx.Request("POST", OPENAI_URL, content=openai_chat_body)
+        prepared = engine.prepare(req)
+        assert prepared is not None
+        assert prepared.scope == "api.openai.com"
+
+    def test_cache_scope_host_same_host_different_model_share_scope(
+        self, make_engine, openai_chat_body
+    ):
+        engine = make_engine(cache_scope=CacheScope.HOST)
+        first = engine.prepare(httpx.Request("POST", OPENAI_URL, content=openai_chat_body))
+        other = json.loads(openai_chat_body)
+        other["model"] = "gpt-4o-mini"
+        second = engine.prepare(
+            httpx.Request("POST", OPENAI_URL, content=json.dumps(other).encode())
+        )
+        assert first is not None
+        assert second is not None
+        assert first.scope == second.scope == "api.openai.com"
+
+    def test_cache_scope_host_different_host_stay_isolated(self, make_engine, openai_chat_body):
+        engine = make_engine(cache_scope=CacheScope.HOST)
+        openai = engine.prepare(httpx.Request("POST", OPENAI_URL, content=openai_chat_body))
+        azure_url = (
+            "https://my-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions"
+        )
+        azure = engine.prepare(httpx.Request("POST", azure_url, content=openai_chat_body))
+        assert openai is not None
+        assert azure is not None
+        assert openai.scope != azure.scope
 
     def test_unparseable_requests_not_counted(self, make_engine):
         engine = make_engine()
@@ -133,6 +166,21 @@ class TestLookup:
         other_model["model"] = "gpt-3.5-turbo"
         req2 = httpx.Request("POST", OPENAI_URL, content=json.dumps(other_model).encode())
         assert engine.lookup(engine.prepare(req2)) is None
+
+    def test_cache_scope_host_lets_different_model_hit(
+        self, make_engine, openai_chat_body, openai_chat_response
+    ):
+        """With cache_scope=HOST, the same prompt to another model reuses the cache."""
+        engine = make_engine(threshold=0.5, cache_scope=CacheScope.HOST)
+        req = httpx.Request("POST", OPENAI_URL, content=openai_chat_body)
+        engine.store(engine.prepare(req), openai_chat_response)
+
+        other_model = json.loads(openai_chat_body)
+        other_model["model"] = "gpt-4o-mini"
+        req2 = httpx.Request("POST", OPENAI_URL, content=json.dumps(other_model).encode())
+        result = engine.lookup(engine.prepare(req2))
+        assert result is not None
+        assert result.response_data == openai_chat_response
 
     def test_different_conversation_history_never_hits(self, make_engine, openai_chat_response):
         """Identical last user turn in different conversations must not collide."""
