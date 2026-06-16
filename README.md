@@ -193,7 +193,7 @@ print(cache.get_stats().to_dict())
 cache.stop()
 ```
 
-Full example: [examples/azure_openai_identity.py](examples/azure_openai_identity.py). It authenticates with Microsoft Entra ID (`DefaultAzureCredential`) — no API key needed — and uses `cache_scope=CacheScope.HOST` so every deployment on the same Azure resource shares one cache. API-key auth works too: Khazad matches the request path (`/chat/completions`), not the auth method or host.
+Full example: [examples/azure_openai_entra.py](examples/azure_openai_entra.py). It authenticates with Microsoft Entra ID (`DefaultAzureCredential`) — no API key needed — and uses `cache_scope=CacheScope.HOST` so every deployment on the same Azure resource shares one cache. API-key auth works too: Khazad matches the request path (`/chat/completions`), not the auth method or host.
 
 </details>
 
@@ -489,7 +489,7 @@ uv run python -m ruff check . --fix
 uv run python -m ruff format .
 
 # Smoke test against a real endpoint (requires Redis 8 + credentials)
-uv run python examples/azure_openai_identity.py
+uv run python examples/azure_openai_entra.py
 ```
 
 ## License
