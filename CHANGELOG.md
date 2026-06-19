@@ -5,16 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- `hosts` opt-in allowlist (exact hosts and `*.` wildcard subdomains) — restricts interception to explicitly listed endpoints.
-- `CacheScope` enum (`MODEL` / `HOST`) exported from the package, controlling how cache entries are partitioned within a provider host.
-
-### Changed
-- Replaced the `shared_models: bool` flag with `cache_scope: CacheScope` (`CacheScope.MODEL` by default; `CacheScope.HOST` shares one cache across a provider's models). The string values `"model"` / `"host"` are also accepted. `shared_models=True` becomes `cache_scope="host"`.
-
-## [0.1.0] - 2026-06-10
+## [0.1.0] - 2026-06-13
 
 First public release.
 
@@ -30,6 +21,6 @@ First public release.
 - Embedding backends: HuggingFace `sentence-transformers` (default, local) and OpenAI Embeddings (optional extra `khazad[openai-embeddings]`).
 - Configurable similarity threshold, TTL with automatic pruning of orphaned vectors, Redis key namespace, log level.
 - Thread-safe hit/miss statistics (`total_requests`, `cache_hits`, `cache_misses`, `hit_rate`, `avg_hit_similarity`).
+- `hosts` opt-in allowlist (exact hosts and `*.` wildcard subdomains) — restricts interception to explicitly listed endpoints.
 
-[Unreleased]: https://github.com/GuglielmoCerri/khazad/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/GuglielmoCerri/khazad/releases/tag/v0.1.0
