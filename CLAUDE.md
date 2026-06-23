@@ -95,10 +95,14 @@ was installed stop serving from cache immediately after `stop()`.
   `_ReplayStream` implements both `SyncByteStream` and `AsyncByteStream`, so sync and
   async clients both replay correctly.
 - **Miss**: the upstream SSE body is tee'd through `_SyncTeeStream` / `_AsyncTeeStream`
-  with zero added latency. On natural exhaustion (never on abort), the collected bytes
-  are passed to `parser.response_from_stream(sse)`, which reconstructs the **canonical
-  JSON response** before caching. The cache therefore only ever contains plain JSON —
-  a streamed miss can serve a non-streamed hit and vice versa.
+  with zero added latency. The collected bytes are passed to `parser.response_from_stream(sse)`
+  when the stream ends — on natural exhaustion **or** on `close()`/`aclose()`. The latter
+  matters because SDKs (e.g. the OpenAI client) break their read loop on the terminal SSE
+  sentinel and close the response without driving the byte stream to EOF, so caching on
+  natural exhaustion alone would never fire. `response_from_stream` reconstructs the
+  **canonical JSON response** only when the capture is complete (OpenAI Chat requires the
+  `[DONE]` sentinel, Anthropic requires `message_stop`, Responses requires
+  `response.completed`); a partial/aborted stream reconstructs to `None` and is never cached.
 - Compressed SSE bodies (`content-encoding != identity`) are passed through uncached.
 - Gemini streaming (`:streamGenerateContent`) is not matched at all — pass-through.
 
