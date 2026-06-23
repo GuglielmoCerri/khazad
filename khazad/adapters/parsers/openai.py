@@ -74,7 +74,14 @@ class OpenAIParser(ProviderParser):
         yield b"data: [DONE]\n\n"
 
     def response_from_stream(self, sse_data: bytes) -> bytes | None:
-        """Reassemble a complete chat completion from captured SSE chunks."""
+        """Reassemble a complete chat completion from captured SSE chunks.
+
+        Returns None unless the stream carried its terminal ``[DONE]``
+        sentinel — a partial/aborted stream must never be cached.
+        """
+        if b"[DONE]" not in sse_data:
+            return None
+
         meta: dict = {}
         parts: list[str] = []
         finish_reason = None

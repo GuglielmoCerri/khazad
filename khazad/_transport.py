@@ -221,24 +221,39 @@ class _ReplayStream(httpx.SyncByteStream, httpx.AsyncByteStream):
 
 
 class _SyncTeeStream(httpx.SyncByteStream):
-    """Pass chunks through untouched; cache the body once fully consumed."""
+    """Pass chunks through untouched; cache the body when the stream ends.
+
+    SDKs (e.g. the OpenAI client) break their read loop on the terminal SSE
+    sentinel and call ``close()`` without driving the byte stream to EOF, so
+    the body is captured on *either* natural exhaustion or ``close()``. The
+    parser's :meth:`response_from_stream` decides whether the captured bytes
+    form a complete response — an aborted, partial stream reconstructs to
+    ``None`` and is never cached.
+    """
 
     def __init__(self, inner: httpx.SyncByteStream, on_complete: Callable[[bytes], None]) -> None:
         self._inner = inner
         self._on_complete = on_complete
+        self._parts: list[bytes] = []
+        self._finished = False
 
     def __iter__(self):
-        parts: list[bytes] = []
         for chunk in self._inner:
-            parts.append(chunk)
+            self._parts.append(chunk)
             yield chunk
-        # Natural exhaustion only — an aborted stream is never cached.
+        self._finish()
+
+    def _finish(self) -> None:
+        if self._finished:
+            return
+        self._finished = True
         try:
-            self._on_complete(b"".join(parts))
+            self._on_complete(b"".join(self._parts))
         except Exception:
             logger.warning("[Khazad] Failed to store streamed response", exc_info=True)
 
     def close(self) -> None:
+        self._finish()
         self._inner.close()
 
 
@@ -248,13 +263,20 @@ class _AsyncTeeStream(httpx.AsyncByteStream):
     def __init__(self, inner: httpx.AsyncByteStream, on_complete: Callable[[bytes], None]) -> None:
         self._inner = inner
         self._on_complete = on_complete
+        self._parts: list[bytes] = []
+        self._finished = False
 
     async def __aiter__(self):
-        parts: list[bytes] = []
         async for chunk in self._inner:
-            parts.append(chunk)
+            self._parts.append(chunk)
             yield chunk
-        body = b"".join(parts)
+        self._finish()
+
+    def _finish(self) -> None:
+        if self._finished:
+            return
+        self._finished = True
+        body = b"".join(self._parts)
         asyncio.get_running_loop().run_in_executor(None, self._safe_complete, body)
 
     def _safe_complete(self, body: bytes) -> None:
@@ -264,4 +286,5 @@ class _AsyncTeeStream(httpx.AsyncByteStream):
             logger.warning("[Khazad] Failed to store streamed response", exc_info=True)
 
     async def aclose(self) -> None:
+        self._finish()
         await self._inner.aclose()

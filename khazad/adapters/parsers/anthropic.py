@@ -97,6 +97,7 @@ class AnthropicParser(ProviderParser):
         parts: list[str] = []
         stop_reason = None
         usage_delta: dict = {}
+        saw_stop = False
 
         for payload in self._iter_sse_payloads(sse_data):
             kind = payload.get("type")
@@ -109,8 +110,10 @@ class AnthropicParser(ProviderParser):
             elif kind == "message_delta":
                 stop_reason = payload.get("delta", {}).get("stop_reason")
                 usage_delta = payload.get("usage", {})
+            elif kind == "message_stop":
+                saw_stop = True
 
-        if message is None or not parts:
+        if message is None or not parts or not saw_stop:
             return None
 
         message["content"] = [{"type": "text", "text": "".join(parts)}]
