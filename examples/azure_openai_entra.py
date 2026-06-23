@@ -1,3 +1,6 @@
+# Run from the repo root:
+#  uv run python -P examples/azure_openai_entra.py
+# -P (safe path) stops the cwd from shadowing the installed `khazad` package.
 import os
 import time
 
@@ -25,17 +28,22 @@ client = AzureOpenAI(
     azure_endpoint=endpoint,
     azure_ad_token_provider=token_provider,
 )
-
+cache.flush()
 prompt = "What is the capital of Spain?"
 
 for i in range(2):
     start = time.perf_counter()
-    response = client.chat.completions.create(
+    stream = client.chat.completions.create(
         model=deployment,
         messages=[{"role": "user", "content": prompt}],
+        stream=True,
     )
+    chunks = []
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            chunks.append(chunk.choices[0].delta.content)
     elapsed = (time.perf_counter() - start) * 1000
-    print(f"[call {i + 1}] {elapsed:.1f}ms — {response.choices[0].message.content}")
+    print(f"[call {i + 1}] {elapsed:.1f}ms — {''.join(chunks)}")
     deployment = "gpt-5.4"
 
 print(cache.get_stats().to_dict())
