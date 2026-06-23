@@ -173,14 +173,22 @@ class TestStreamingMissCapture:
             assert data["choices"][0]["message"]["content"] == "Paris is the capital of France."
 
     def test_aborted_stream_not_cached(self, engine, openai_streaming_body, openai_chat_response):
-        """A stream closed before exhaustion must not poison the cache."""
+        """A stream closed before its terminal sentinel must not poison the cache."""
         install(engine)
         api_calls = 0
+        parser = OpenAIParser()
+        frames = list(parser.stream_chunks(openai_chat_response))
 
         def handler(req: httpx.Request) -> httpx.Response:
             nonlocal api_calls
             api_calls += 1
-            return sse_handler(openai_chat_response)(req)
+            # Deliver each SSE frame as a separate chunk so a partial read
+            # captures an incomplete stream (no trailing ``[DONE]``).
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=iter(frames),
+            )
 
         transport = httpx.MockTransport(handler)
         with httpx.Client(transport=transport) as client:
@@ -190,7 +198,7 @@ class TestStreamingMissCapture:
                 content=openai_streaming_body,
                 headers={"content-type": "application/json"},
             ) as resp:
-                next(resp.iter_bytes())  # read one chunk, then abort
+                next(resp.iter_bytes())  # read one frame, then abort
 
             client.post(
                 CHAT_URL,
