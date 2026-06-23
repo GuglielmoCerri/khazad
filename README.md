@@ -13,8 +13,8 @@
 
 *Transparent, transport-layer semantic cache for LLM API calls powered by Redis Vector Sets.*
 
-<p align="center"><b>~72% fewer API calls · ~99% faster on hits · ~70% lower spend · 100% transparent</b></p>
-<p align="center"><sub>Illustrative figures at a 0.72 hit rate (4ms cache replay vs. ~800ms upstream call). Your numbers depend on traffic.</sub></p>
+<p align="center"><b>~50% fewer API calls · ~96% faster on hits · ~50% lower spend · 100% transparent</b></p>
+<p align="center"><sub>Illustrative figures at a 0.50 hit rate (280ms cache replay vs. ~7900ms upstream call). Your numbers depend on traffic.</sub></p>
 
 Khazad intercepts LLM HTTP traffic at the **transport layer** and serves semantically equivalent requests from a Redis vector cache, **with zero changes to your application code**.
 
@@ -362,6 +362,8 @@ The host always stays part of the scope, so different providers never mix (an Az
 | `openai` | Paid | `uv add khazad[openai-embeddings]` |
 
 ## Observability
+
+<p><img src="docs/_static/run_example.png" alt="Khazad cache hit/miss log output from an example run" width="820"></p>
 
 Khazad emits a log line for every intercepted request, so you can watch cache behaviour in real time. A hit reports the cosine similarity that triggered it and the replay latency; a miss notes that the request was forwarded upstream. Raise `log_level` to `DEBUG` for per-request detail, or keep it at `INFO` for just hits and misses.
 
