@@ -6,41 +6,58 @@
 </p>
 <h2 align="center">Khazad — You shall not pass.</h2>
 
-*Transparent, transport-layer semantic cache for LLM API calls powered by Redis Vector Sets.*
-
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/GuglielmoCerri/khazad)
 [![Redis 8](https://img.shields.io/badge/Redis-8-red.svg)](https://redis.io/)
 
-Khazad intercepts LLM HTTP traffic at the **transport layer** and serves semantically equivalent requests from a Redis vector cache — with zero changes to your application code.
+*Transparent, transport-layer semantic cache for LLM API calls powered by Redis Vector Sets.*
+
+<p align="center"><b>~72% fewer API calls · ~99% faster on hits · ~70% lower spend · 100% transparent</b></p>
+<p align="center"><sub>Illustrative figures at a 0.72 hit rate (4ms cache replay vs. ~800ms upstream call). Your numbers depend on traffic.</sub></p>
+
+Khazad intercepts LLM HTTP traffic at the **transport layer** and serves semantically equivalent requests from a Redis vector cache, **with zero changes to your application code**.
 
 ## How it works
 
-```
-Your App (any LLM SDK built on httpx)
-        │ HTTP
-        ▼
-Khazad transport patch
-        │ parse once → host + model scope, conversation text, stream flag
-        ▼
-embed prompt ──► Redis Vector Set (VSIM)
-        │
-   similarity ≥ threshold? ── yes ──► replay cached response (JSON or SSE)
-        │ no
-        ▼
-   real API call ──► cache response ──► return it unchanged
-```
+<p align="center"><img src="docs/_static/flow.svg" alt="Khazad flow" width="820"></p>
 
 Key properties:
 
-- **Model-aware** — each `(provider host, model)` pair gets its own vector set, so a `gpt-4o` answer is never served to a `gpt-4o-mini` call, no matter how similar the prompt. Set `cache_scope="host"` to scope by **provider host only**, letting every model or deployment on the same provider share one cache (different providers stay isolated — see [Configuration](#configuration)).
+- **Model-aware** — each `(provider, model)` pair gets its own vector set, so a `gpt-4o` answer is never served to a `gpt-4o-mini` call, no matter how similar the prompt. Set `cache_scope="host"` to scope by **provider host only**, letting every model or deployment on the same provider share one cache (different providers stay isolated — see [Configuration](#configuration)).
 - **Conversation-aware** — the whole message list (system, user, assistant) is embedded, not just the last user turn. Two different conversations ending with the same follow-up question ("What about its population?") never collide.
 - **Streaming both ways** — cache hits replay as real SSE streams (sync and async clients); cache misses that stream are captured chunk-by-chunk with no added latency and reassembled into a canonical JSON response, so a streamed answer can later serve a non-streamed request and vice versa. Aborted streams are never cached.
 
-## Installation
+## Why use it
 
-**From PyPI** (once published):
+Semantic caching trades exactness for cost and latency. Know the trade before turning it on. Use it when you have:
+
+- High-volume, repetitive traffic: FAQ bots, support assistants, RAG front-ends where many users ask near-identical questions
+- Dev / test / CI environments — stop paying for the same prompt on every run
+- Demos and load tests where deterministic, instant responses are a feature
+- Cost ceilings on internal tools
+
+**Operational caveats:**
+- **Privacy**: prompts are embedded and responses are stored **in clear text in Redis**. If prompts may contain PII or secrets, set a `ttl`, enable Redis AUTH/TLS, and treat the Redis instance with the same care as your logs.
+- **Process-wide patch**: Khazad wraps *every* `httpx.Client`/`AsyncClient` created after `init()` — non-LLM httpx traffic passes through untouched, but the patch is process-global. Call `stop()` on shutdown. Use `hosts=[...]` to restrict interception to the endpoints you actually want cached.
+- **httpx-only**: SDKs built on `httpx` are covered (OpenAI, Anthropic, Gemini via `google-genai`, Mistral, and most proxies). SDKs using `requests`, `aiohttp`, or `boto3` (AWS Bedrock) are not intercepted.
+- **Single process**: the patch lives in the Python process that called `init()`. Multiple workers share the Redis cache but each needs its own `init()`.
+- **False-positive control**: start at `threshold=0.90` and *raise* it if you see wrong hits. Watch `avg_hit_similarity` in `get_stats()` — if it sits near your threshold, your traffic may be too diverse to cache safely.
+
+## Getting Started
+
+### Prerequisites
+
+- Python >= 3.10
+- Redis 8 (Vector Sets support required)
+
+```bash
+docker run -d --name redis8 -p 6379:6379 redis:8
+```
+
+### Installation
+
+**From PyPI**:
 ```bash
 uv add khazad
 ```
@@ -64,31 +81,9 @@ To use the local checkout from another project:
 uv add --editable /path/to/khazad
 ```
 
-## Two ways to use it
+## Usage
 
-### 1. Functional singleton API
-
-The simplest integration — two lines, zero refactoring:
-
-```python
-import khazad
-
-khazad.init(redis_url="redis://localhost:6379", threshold=0.90)
-
-# Your existing code runs unchanged — see provider sections below
-
-print(khazad.get_stats())
-# {'total_requests': 2, 'cache_hits': 1, 'cache_misses': 1,
-#  'hit_rate': 0.5, 'avg_hit_similarity': 0.94}
-
-khazad.stop()
-```
-
-Available functions: `init()`, `stop()`, `get_stats()`, `flush()`, `is_active()`
-
-### 2. `Khazad` class (explicit lifecycle)
-
-Use the `Khazad` class directly when you need explicit control over the instance — useful in long-running services, tests, or dependency injection:
+Use the `Khazad` class directly when you need explicit control over the instance, useful in long-running services, tests, or dependency injection:
 
 ```python
 from khazad import Khazad
@@ -102,15 +97,13 @@ cache = Khazad(
 
 print(cache.is_active())   # True
 print(cache.get_stats())   # Stats(total_requests=0, ...)
-cache.flush()              # clear all cached entries
-cache.stop()               # restore original HTTP transports
 ```
 
-The class exposes the same methods as the functional API: `stop()`, `get_stats()`, `flush()`, `is_active()`.
+Available functions: `init()`, `stop()`, `get_stats()`, `flush()`, `is_active()`. See [API Reference](#api-reference) for details.
 
-## Provider Examples
+### Examples
 
-Khazad activates once and intercepts **every** LLM SDK that uses `httpx` underneath — no per-provider wiring needed. Pick the provider you use:
+Khazad activates once and intercepts **every** LLM SDK that uses `httpx` underneath, no per-provider wiring needed. Pick the provider you use:
 
 <details>
 <summary><b>OpenAI</b> — official SDK against <code>api.openai.com</code></summary>
@@ -283,6 +276,8 @@ Matches `generativelanguage.googleapis.com/*/models/*:generateContent`. Gemini s
 
 </details>
 
+See examples folder for full scripts.
+
 ## Supported Providers
 
 | Provider | URL pattern matched | Streaming |
@@ -294,84 +289,17 @@ Matches `generativelanguage.googleapis.com/*/models/*:generateContent`. Gemini s
 | Anthropic | `api.anthropic.com/v1/messages` | cached + replayed |
 | Google Gemini | `generativelanguage.googleapis.com/*:generateContent` | pass-through |
 
-## Limitations / When to use
-
-Semantic caching trades exactness for cost and latency. Know the trade before turning it on.
-
-**Good fit:**
-- High-volume, repetitive traffic: FAQ bots, support assistants, RAG front-ends where many users ask near-identical questions
-- Dev / test / CI environments — stop paying for the same prompt on every run
-- Demos and load tests where deterministic, instant responses are a feature
-- Cost ceilings on internal tools
-
-**Bad fit — keep it off:**
-- Answers that depend on *exact* wording: math, dates, quantities, code generation, legal/medical text. Two prompts at 0.91 similarity can require different answers; the cache will happily serve the wrong one.
-- Workflows that rely on sampling variety (brainstorming, creative writing, "regenerate" buttons). A cache hit always returns the same response — the variety silently disappears.
-- Agentic loops with tool calls — tool-call responses are not reconstructed from streams, and caching decisions mid-loop is rarely what you want.
-
-**Operational caveats:**
-- **Privacy**: prompts are embedded and responses are stored **in clear text in Redis**. If prompts may contain PII or secrets, set a `ttl`, enable Redis AUTH/TLS, and treat the Redis instance with the same care as your logs.
-- **Process-wide patch**: Khazad wraps *every* `httpx.Client`/`AsyncClient` created after `init()` — non-LLM httpx traffic passes through untouched, but the patch is process-global. Call `stop()` on shutdown. Use `hosts=[...]` to restrict interception to the endpoints you actually want cached.
-- **httpx-only**: SDKs built on `httpx` are covered (OpenAI, Anthropic, Gemini via `google-genai`, Mistral, and most proxies). SDKs using `requests`, `aiohttp`, or `boto3` (AWS Bedrock) are not intercepted.
-- **Single process**: the patch lives in the Python process that called `init()`. Multiple workers share the Redis cache but each needs its own `init()`.
-- **False-positive control**: start at `threshold=0.90` and *raise* it if you see wrong hits. Watch `avg_hit_similarity` in `get_stats()` — if it sits near your threshold, your traffic may be too diverse to cache safely.
-
 ## API Reference
 
-The module exposes five functions as the singleton API. The `Khazad` class exposes the same surface as instance methods (no `init` — instantiation does that).
+The module exposes five functions as the singleton API. The `Khazad` class exposes the same surface as instance methods (no `init`, instantiation does that).
 
-### `init(redis_url, threshold, ttl, namespace, embedder, embedding_model, log_level, hosts, cache_scope)`
-
-Activate the global singleton. Builds the embedder, connects to Redis, installs the `httpx` transport patch. **Required call before any LLM traffic.** Calling twice without `stop()` in between is a no-op (warns).
-
-```python
-khazad.init(redis_url="redis://localhost:6379", threshold=0.90)
-```
-
-All parameters have defaults — see [Configuration](#configuration). Class equivalent: `Khazad(...)` constructor.
-
-### `stop()`
-
-Restore original `httpx` transports, close the Redis connection, and clear the singleton. Idempotent — safe to call when not active. Cached data in Redis stays — only the in-process patch is removed.
-
-```python
-khazad.stop()
-```
-
-Always call before process exit (or use a `try/finally`) to avoid leaking patched `httpx.Client.__init__` into other libraries that import after Khazad. Clients created while Khazad was active stop serving from the cache as soon as `stop()` is called. Class equivalent: `cache.stop()`.
-
-### `get_stats() -> dict`
-
-Snapshot of cache metrics as a plain dict. Thread-safe. Returns zero-stats if Khazad never initialized.
-
-```python
-khazad.get_stats()
-# {'total_requests': 1000, 'cache_hits': 720, 'cache_misses': 280,
-#  'hit_rate': 0.72, 'avg_hit_similarity': 0.943}
-```
-
-Use to track hit rate in production, expose as Prometheus gauge, or log periodically. Class equivalent: `cache.get_stats()` (returns a `Stats` dataclass — call `.to_dict()` for the same shape).
-
-### `flush()`
-
-Wipe **all** cached entries in the current namespace and reset stats counters to zero. Destructive — use for tests, dev resets, or after a prompt change that invalidates prior responses.
-
-```python
-khazad.flush()
-```
-
-Only deletes keys under the configured `namespace` prefix; other Redis data is untouched. No-op (warns) if Khazad never initialized. Class equivalent: `cache.flush()`.
-
-### `is_active() -> bool`
-
-Returns `True` if Khazad is currently running (initialized and not stopped). Useful for guarding code paths or asserting setup in tests.
-
-```python
-if not khazad.is_active():
-    khazad.init(...)
-```
-
-Class equivalent: `cache.is_active()`.
+| Function | Description |
+|---|---|
+| `init(...)` | Activate the global singleton: builds the embedder, connects to Redis, installs the `httpx` transport patch. Required before any LLM traffic; calling twice without `stop()` is a no-op. See [Configuration](#configuration) for parameters. |
+| `stop()` | Restore original `httpx` transports, close Redis, and clear the singleton. Idempotent. Cached data in Redis stays. |
+| `get_stats()` | Returns a dictionary with a thread-safe snapshot of cache metrics (requests, hits, misses, hit rate, avg similarity). |
+| `flush()` | Clear all cached entries in the current namespace and reset stats counters. Destructive. |
+| `is_active()` | Returns `True` if Khazad is currently running (initialized and not stopped). |
 
 ## Configuration
 
@@ -379,17 +307,29 @@ All parameters are the same whether you use `khazad.init()` or `Khazad(...)`:
 
 ```python
 Khazad(
-    redis_url="redis://localhost:6379",  # Redis connection URL
-    threshold=0.90,                      # Cosine similarity threshold (0.0–1.0)
-    ttl=3600,                            # Cache TTL in seconds (None = no expiry)
-    namespace="khazad",                  # Redis key prefix
-    embedder="huggingface",              # "huggingface" (default, free) or "openai"
+    redis_url="redis://localhost:6379",  
+    threshold=0.90,                     
+    ttl=3600,                            
+    namespace="khazad",                 
+    embedder="huggingface",              
     embedding_model="redis/langcache-embed-v2",
-    log_level="INFO",                    # DEBUG | INFO | WARNING | ERROR
-    hosts=None,                          # Opt-in host allowlist (None = all hosts)
-    cache_scope="model",                 # "model" (default) or "host" (one cache per provider, ignore model)
+    log_level="INFO",                    
+    hosts=None,                          
+    cache_scope="model"
 )
 ```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `redis_url` | `"redis://localhost:6379"` | Connection URL for the Redis 8 instance that stores vectors and cached responses. |
+| `threshold` | `0.90` | Cosine similarity threshold (0.0–1.0) above which a request counts as a cache hit. |
+| `ttl` | `3600` | Time-to-live in seconds for cached response bodies; `None` means no expiry. |
+| `namespace` | `"khazad"` | Prefix for all Redis keys, isolating this cache from other data and other namespaces. |
+| `embedder` | `"huggingface"` | Embedding backend: `"huggingface"` (free, local) or `"openai"` (paid API). |
+| `embedding_model` | `"redis/langcache-embed-v2"` | Model used to embed prompts; must match the chosen `embedder`. |
+| `log_level` | `"INFO"` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, or `ERROR`. |
+| `hosts` | `None` | Opt-in host allowlist; `None` means all matching hosts (see below). |
+| `cache_scope` | `"model"` | Cache partitioning: `"model"` (per `(host, model)`) or `"host"` (per provider, see below). |
 
 **`hosts` — opt-in allowlist.** By default Khazad considers traffic to any host that matches a provider URL pattern. Pass an explicit allowlist to restrict interception to the endpoints you intend to cache; everything else passes through untouched. Supports exact hosts and `*.` wildcard subdomains:
 
@@ -421,33 +361,16 @@ The host always stays part of the scope, so different providers never mix (an Az
 | `huggingface` (default) | Free | Downloads model on first use |
 | `openai` | Paid | `uv add khazad[openai-embeddings]` |
 
-## Architecture
-
-Khazad follows **Hexagonal Architecture** (Ports & Adapters). The `Khazad` class is the single entry point — it owns the embedder, vector store, parsers, and cache logic directly, with no intermediate engine layer.
-
-```
-khazad/
-├── khazad.py          # Khazad class — prepare / lookup / store, stats, lifecycle
-├── _models.py         # ParsedRequest, CacheHit, Stats
-├── _transport.py      # httpx transport patch + sync/async cached transports
-├── ports/             # Abstract interfaces
-│   ├── embedder.py    # Embedder
-│   ├── parser.py      # ProviderParser (+ shared SSE helpers)
-│   └── store.py       # VectorStore (scope-aware)
-└── adapters/          # Concrete implementations
-    ├── embedders/     # HuggingFace (free), OpenAI (paid)
-    ├── parsers/       # OpenAI, OpenAI Responses, Anthropic, Gemini
-    └── redis/         # Redis 8 Vector Sets
-```
-
-Each request is parsed **once** (`prepare`), producing the cache scope (`host/model`), the conversation text, and the stream flag. The embedding is computed once and reused between lookup and store. In Redis, each scope has its own vector set (`{namespace}:vset:{host}/{model}`); response bodies live under `{namespace}:resp:{key}`.
-
 ## Observability
+
+Khazad emits a log line for every intercepted request, so you can watch cache behaviour in real time. A hit reports the cosine similarity that triggered it and the replay latency; a miss notes that the request was forwarded upstream. Raise `log_level` to `DEBUG` for per-request detail, or keep it at `INFO` for just hits and misses.
 
 ```
 [Khazad] CACHE HIT - Similarity: 0.94 - Latency: 4ms
 [Khazad] CACHE MISS - Forwarding to API
 ```
+
+For aggregate metrics, call `get_stats()` at any time. It returns a thread-safe snapshot of total requests, hits, misses, the resulting hit rate, and the average similarity of served hits — ideal for periodic logging or exposing as a Prometheus gauge. Watch `avg_hit_similarity`: if it hovers near your `threshold`, your traffic may be too diverse to cache safely and you should raise the threshold.
 
 ```python
 cache.get_stats().to_dict()
@@ -455,43 +378,12 @@ cache.get_stats().to_dict()
 #  'hit_rate': 0.72, 'avg_hit_similarity': 0.943}
 ```
 
-## Requirements
+## Contributing
 
-- Python >= 3.10
-- Redis 8 (Vector Sets support required)
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Please read it before opening a pull request, as it covers the branching model, coding conventions, and the lint and test checks your changes are expected to pass.
 
-```bash
-docker run -d --name redis8 -p 6379:6379 redis:8
-```
-
-## Roadmap
-
-- **Per-host / per-model thresholds** — different similarity bars for different traffic
-- **Targeted invalidation** — delete cached entries matching a prompt, not just `flush()`
-- **Prometheus metrics endpoint** — hit rate, latency, similarity distribution out of the box
-- **Async embedder** — embed off the event loop natively instead of via thread executor
-- **More transports** — `requests`/`aiohttp` interception, AWS Bedrock (`boto3`)
-
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development
-
-```bash
-git clone https://github.com/GuglielmoCerri/khazad.git
-cd khazad
-uv sync --group dev
-
-# Tests (no Redis or API keys needed — fakes and mock transports)
-uv run python -m pytest tests/ -q
-
-# Lint / format
-uv run python -m ruff check . --fix
-uv run python -m ruff format .
-
-# Smoke test against a real endpoint (requires Redis 8 + credentials)
-uv run python examples/azure_openai_entra.py
-```
+The unit and integration suites use fake embedders and mock transports, so the full test run needs neither a live Redis instance nor real API keys.
 
 ## License
 
-MIT
+[MIT](LICENSE)
