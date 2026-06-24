@@ -38,6 +38,7 @@ Semantic caching trades exactness for cost and latency. Know the trade before tu
 - Cost ceilings on internal tools
 
 **Operational caveats:**
+
 - **Privacy**: prompts are embedded and responses are stored **in clear text in Redis**. If prompts may contain PII or secrets, set a `ttl`, enable Redis AUTH/TLS, and treat the Redis instance with the same care as your logs.
 - **Process-wide patch**: Khazad wraps *every* `httpx.Client`/`AsyncClient` created after `init()` — non-LLM httpx traffic passes through untouched, but the patch is process-global. Call `stop()` on shutdown. Use `hosts=[...]` to restrict interception to the endpoints you actually want cached.
 - **httpx-only**: SDKs built on `httpx` are covered (OpenAI, Anthropic, Gemini via `google-genai`, Mistral, and most proxies). SDKs using `requests`, `aiohttp`, or `boto3` (AWS Bedrock) are not intercepted.
@@ -58,16 +59,19 @@ docker run -d --name redis8 -p 6379:6379 redis:8
 ### Installation
 
 **From PyPI**:
+
 ```bash
 uv add khazad
 ```
 
 For the OpenAI embedding backend (optional):
+
 ```bash
 uv add khazad[openai-embeddings]
 ```
 
 **Local / development install:**
+
 ```bash
 git clone https://github.com/GuglielmoCerri/khazad.git
 cd khazad
@@ -77,6 +81,7 @@ uv sync --group dev
 `uv sync` reads `pyproject.toml`, creates `.venv` if it doesn't exist, and installs the project itself in editable mode — no separate `pip install -e .` needed.
 
 To use the local checkout from another project:
+
 ```bash
 uv add --editable /path/to/khazad
 ```
@@ -322,7 +327,7 @@ Khazad(
 | Parameter | Default | Description |
 |---|---|---|
 | `redis_url` | `"redis://localhost:6379"` | Connection URL for the Redis 8 instance that stores vectors and cached responses. |
-| `threshold` | `0.90` | Cosine similarity threshold (0.0–1.0) above which a request counts as a cache hit. |
+| `threshold` | `0.90` | Cosine similarity threshold (0.0-1.0) above which a request counts as a cache hit. |
 | `ttl` | `3600` | Time-to-live in seconds for cached response bodies; `None` means no expiry. |
 | `namespace` | `"khazad"` | Prefix for all Redis keys, isolating this cache from other data and other namespaces. |
 | `embedder` | `"huggingface"` | Embedding backend: `"huggingface"` (free, local) or `"openai"` (paid API). |
@@ -348,6 +353,7 @@ khazad.init(cache_scope=CacheScope.HOST)   # or cache_scope="host"
 The host always stays part of the scope, so different providers never mix (an Azure OpenAI response is never replayed to a Gemini client). Use it only for format-compatible pools — e.g. multiple Azure OpenAI deployments, or treating `gpt-4o` and `gpt-4o-mini` as interchangeable. The trade-off is semantic: a smaller model may serve an answer originally produced by a larger one.
 
 **Threshold guidance:**
+
 - `0.95+` — strict, near-identical prompts only
 - `0.90` — recommended default
 - `0.85` — aggressive, higher hit rate
@@ -363,11 +369,11 @@ The host always stays part of the scope, so different providers never mix (an Az
 
 ## Observability
 
-<p><img src="docs/_static/run_example.png" alt="Khazad cache hit/miss log output from an example run" width="820"></p>
+<p><img src="docs/_static/run_example.png" alt="Khazad cache hit/miss log output from an example run" width="1024"></p>
 
 Khazad emits a log line for every intercepted request, so you can watch cache behaviour in real time. A hit reports the cosine similarity that triggered it and the replay latency; a miss notes that the request was forwarded upstream. Raise `log_level` to `DEBUG` for per-request detail, or keep it at `INFO` for just hits and misses.
 
-```
+```text
 [Khazad] CACHE HIT - Similarity: 0.94 - Latency: 4ms
 [Khazad] CACHE MISS - Forwarding to API
 ```
