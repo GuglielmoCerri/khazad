@@ -1,7 +1,7 @@
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/_static/logo-dark.png">
-  <img alt="Khazad Logo" src="docs/_static/logo-light.png" width="360px">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/GuglielmoCerri/khazad/main/docs/_static/logo-dark.png">
+  <img alt="Khazad Logo" src="https://raw.githubusercontent.com/GuglielmoCerri/khazad/main/docs/_static/logo-light.png" width="360px">
 </picture>
 </p>
 <h2 align="center">Khazad — You shall not pass.</h2>
@@ -20,7 +20,7 @@ Khazad intercepts LLM HTTP traffic at the **transport layer** and serves semanti
 
 ## How it works
 
-<p align="center"><img src="docs/_static/flow.svg" alt="Khazad flow" width="820"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/GuglielmoCerri/khazad/main/docs/_static/flow.svg" alt="Khazad flow" width="820"></p>
 
 Key properties:
 
@@ -384,7 +384,7 @@ The host always stays part of the scope, so different providers never mix (an Az
 
 ## Observability
 
-<p><img src="docs/_static/run_example.png" alt="Khazad cache hit/miss log output from an example run" width="1024"></p>
+<p><img src="https://raw.githubusercontent.com/GuglielmoCerri/khazad/main/docs/_static/run_example.png" alt="Khazad cache hit/miss log output from an example run" width="1024"></p>
 
 Khazad emits a log line for every intercepted request, so you can watch cache behaviour in real time. A hit reports the cosine similarity that triggered it and the replay latency; a miss notes that the request was forwarded upstream. Raise `log_level` to `DEBUG` for per-request detail, or keep it at `INFO` for just hits and misses.
 
