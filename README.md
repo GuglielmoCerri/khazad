@@ -108,7 +108,9 @@ Available functions: `init()`, `stop()`, `get_stats()`, `flush()`, `is_active()`
 
 ### Examples
 
-Khazad activates once and intercepts **every** LLM SDK that uses `httpx` underneath, no per-provider wiring needed. Pick the provider you use:
+Khazad activates once and intercepts **every** LLM SDK that uses `httpx` underneath, no per-provider wiring needed. For further examples see the [examples folder](examples).
+
+Pick the provider you use:
 
 <details>
 <summary><b>OpenAI</b> — official SDK against <code>api.openai.com</code></summary>
@@ -191,38 +193,41 @@ print(cache.get_stats().to_dict())
 cache.stop()
 ```
 
-Full example: [examples/azure_openai_entra.py](examples/azure_openai_entra.py). It authenticates with Microsoft Entra ID (`DefaultAzureCredential`) — no API key needed — and uses `cache_scope=CacheScope.HOST` so every deployment on the same Azure resource shares one cache. API-key auth works too: Khazad matches the request path (`/chat/completions`), not the auth method or host.
+It authenticates with Microsoft Entra ID (`DefaultAzureCredential`) — no API key needed — and uses `cache_scope=CacheScope.HOST` so every deployment on the same Azure resource shares one cache. API-key auth works too: Khazad matches the request path (`/chat/completions`), not the auth method or host.
 
 </details>
 
 <details>
-<summary><b>OpenAI-compatible proxies</b> — LiteLLM, vLLM, Ollama, Together, Groq, …</summary>
+<summary><b>OpenAI-compatible proxies</b> — LiteLLM, vLLM, Ollama, …</summary>
 
 ```python
-import os
+import time
 
 from openai import OpenAI
 
 from khazad import Khazad
 
-cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90)
+cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90, namespace="ollama_example")
 
-# Point base_url at any OpenAI-compatible server
-client = OpenAI(
-    base_url="http://localhost:4000/v1",   # LiteLLM proxy example
-    api_key=os.environ.get("LITELLM_KEY", "sk-anything"),
-)
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+model = "llama3"
 
-response = client.chat.completions.create(
-    model="claude-3-5-sonnet",
-    messages=[{"role": "user", "content": "Hello"}],
-)
-print(response.choices[0].message.content)
+prompt = "What is the capital of Spain?"
 
+for i in range(2):
+    start = time.perf_counter()
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    elapsed = (time.perf_counter() - start) * 1000
+    print(f"[call {i + 1}] {elapsed:.1f}ms — {response.choices[0].message.content}")
+
+print(cache.get_stats().to_dict())
 cache.stop()
 ```
 
-Any host whose URL path ends with `/chat/completions` or `/responses` is cached. Covers vLLM (`http://host:8000/v1/...`), Ollama (`http://localhost:11434/v1/...`), Groq, Together, Mistral, etc.
+Any host whose URL path ends with `/chat/completions` or `/responses` is cached. Covers vLLM (`http://host:8000/v1/...`), Ollama (`http://localhost:11434/v1/...`), Mistral, etc.
 
 </details>
 
@@ -231,22 +236,30 @@ Any host whose URL path ends with `/chat/completions` or `/responses` is cached.
 
 ```python
 import os
+import time
 
 from anthropic import Anthropic
 
 from khazad import Khazad
 
-cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90)
+cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90, namespace="anthropic_example")
 
 client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+model = "claude-haiku-4-5-20251001"
 
-message = client.messages.create(
-    model="claude-3-5-sonnet-latest",
-    max_tokens=256,
-    messages=[{"role": "user", "content": "What is the capital of Italy?"}],
-)
-print(message.content[0].text)
+prompt = "What is the capital of France?"
 
+for i in range(2):
+    start = time.perf_counter()
+    message = client.messages.create(
+        model=model,
+        max_tokens=256,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    elapsed = (time.perf_counter() - start) * 1000
+    print(f"[call {i + 1}] {elapsed:.1f}ms — {message.content[0].text}")
+
+print(cache.get_stats().to_dict())
 cache.stop()
 ```
 
@@ -259,29 +272,31 @@ Matches `api.anthropic.com/v1/messages`. Streaming responses replayed from cache
 
 ```python
 import os
+import time
 
 from google import genai
 
 from khazad import Khazad
 
 cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90)
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+for i in range(2):
+    start = time.perf_counter()
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents="What is the capital of Italy?",
+    )
+    elapsed = (time.perf_counter() - start) * 1000
+    print(f"[call {i + 1}] {elapsed:.1f}ms — {response.text}...")
 
-response = client.models.generate_content(
-    model="gemini-2.5-flash",
-    contents="What is the capital of Italy?",
-)
-print(response.text)
-
+print(cache.get_stats().to_dict())
 cache.stop()
 ```
 
 Matches `generativelanguage.googleapis.com/*/models/*:generateContent`. Gemini streaming (`:streamGenerateContent`) passes through uncached.
 
 </details>
-
-See examples folder for full scripts.
 
 ## Supported Providers
 

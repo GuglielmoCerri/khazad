@@ -1,3 +1,8 @@
+"""
+Run from the repo root:
+> uv run --group examples python -P examples/anthropic.py
+-P (safe path) stops the cwd from shadowing the installed `khazad` package.
+"""
 import os
 import time
 
@@ -8,7 +13,7 @@ from khazad import Khazad
 cache = Khazad(redis_url="redis://localhost:6379", threshold=0.90, namespace="anthropic_example")
 
 client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-model = "claude-3-5-sonnet-latest"
+model = "claude-haiku-4-5-20251001"
 
 prompt = "What is the capital of France?"
 

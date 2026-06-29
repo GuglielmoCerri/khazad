@@ -1,3 +1,8 @@
+"""
+Run from the repo root:
+> uv run --group examples python -P examples/openai.py
+-P (safe path) stops the cwd from shadowing the installed `khazad` package.
+"""
 import os
 import time
 

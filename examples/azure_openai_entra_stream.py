@@ -1,6 +1,8 @@
-# Run from the repo root:
-#  uv run python -P examples/azure_openai_entra.py
-# -P (safe path) stops the cwd from shadowing the installed `khazad` package.
+"""
+Run from the repo root:
+> uv run --group examples python -P examples/azure_openai_entra_stream.py
+-P (safe path) stops the cwd from shadowing the installed `khazad` package.
+"""
 import os
 import time
 
