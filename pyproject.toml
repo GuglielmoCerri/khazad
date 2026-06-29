@@ -1,6 +1,6 @@
 [project]
 name = "khazad"
-version = "0.1.1"
+version = "0.1.2"
 description = "Transparent, transport-layer semantic cache for LLM API calls using Redis 8 Vector Sets"
 readme = "README.md"
 license = "MIT"
