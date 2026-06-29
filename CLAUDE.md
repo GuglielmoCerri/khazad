@@ -16,12 +16,13 @@ uv run python -m ruff check . --fix    # Lint with auto-fix
 uv run python -m ruff format .         # Format code
 
 # Quick smoke test (requires Redis 8 + endpoint credentials)
-uv run python examples/azure_openai.py
+uv run --group examples python -P examples/azure_openai.py
 ```
 
 ## Important Architectural Patterns
 
 ### Single Entry Point — `Khazad` Class
+
 Everything goes through one class. There is no separate engine, config model, or orchestrator.
 `Khazad` owns the embedder, vector store, parsers, stats, and cache logic directly.
 
@@ -36,6 +37,7 @@ cache.stop()
 A module-level singleton API (`khazad.init()` / `khazad.stop()`) wraps `Khazad` for convenience.
 
 ### Request lifecycle: prepare → lookup → store
+
 The transport calls `Khazad.prepare(request)` exactly once per request. It returns a
 `PreparedRequest` (parser, prompt, scope, stream flag) or `None` for pass-through.
 The request body is JSON-parsed **once**; the embedding is computed lazily and memoized
@@ -56,6 +58,7 @@ permanently uncacheable. Do not reintroduce it.
 Unparseable, unmatched, or non-allowlisted requests are **not counted** in stats.
 
 ### Cache scope: host + model
+
 `scope = f"{host}/{model or 'default'}"`. Each scope gets its own Redis vector set,
 so the same prompt sent to `gpt-4o` and `gpt-4o-mini` can never cross-serve.
 The prompt text embedded is the **full conversation** (`role: text` lines, including
@@ -71,6 +74,7 @@ format. Use it only for format-compatible pools (e.g. several Azure OpenAI
 deployments, or `gpt-4o` + `gpt-4o-mini`).
 
 ### Hexagonal Architecture (Ports & Adapters)
+
 - **Ports** (`khazad/ports/`) — abstract interfaces: `Embedder`, `ProviderParser`, `VectorStore`
 - **Adapters** (`khazad/adapters/`) — concrete implementations (Redis, HuggingFace, OpenAI, parsers)
 - `ProviderParser` is an ABC with shared concrete helpers (`build_response`, `_sse`,
@@ -80,6 +84,7 @@ deployments, or `gpt-4o` + `gpt-4o-mini`).
   path-suffix matching (`/chat/completions`).
 
 ### httpx Transport Monkey-Patching
+
 Khazad intercepts LLM traffic by patching `httpx.Client.__init__` and `httpx.AsyncClient.__init__`
 to wrap their transports (`khazad/_transport.py`, `install(cache)` / `uninstall()`).
 
@@ -91,6 +96,7 @@ Transports check `cache.is_active()` on every request — clients created while 
 was installed stop serving from cache immediately after `stop()`.
 
 ### Streaming
+
 - **Hit**: `parser.stream_chunks(cached_json)` is a *sync* generator of SSE frames;
   `_ReplayStream` implements both `SyncByteStream` and `AsyncByteStream`, so sync and
   async clients both replay correctly.
@@ -107,6 +113,7 @@ was installed stop serving from cache immediately after `stop()`.
 - Gemini streaming (`:streamGenerateContent`) is not matched at all — pass-through.
 
 ### Redis adapter (`khazad/adapters/redis/store.py`)
+
 - One vector set per scope: `{namespace}:vset:{scope}`; bodies at `{namespace}:resp:{key}`.
 - `store()` pipelines `VADD` + `SET ex=ttl` (single round-trip).
 - VSIM workaround: redis-py's `parse_vsim_result` callback misparses RESP3 dict responses
@@ -118,6 +125,7 @@ was installed stop serving from cache immediately after `stop()`.
   (`store.delete(scope, key)`) when the body is gone, then counts a miss.
 
 ### Testing with Dependency Injection
+
 For tests, `Khazad` accepts `_vector_store` and `_embedder_instance` keyword args (both or
 neither) to bypass Redis and real embedding models:
 
@@ -135,23 +143,29 @@ This skips Redis connection and transport patching entirely (tests call
 ## Critical Rules
 
 ### Git Operations
+
 **CRITICAL**: NEVER use `git push` or attempt to push to remote repositories. The user will handle all git push operations.
 
 ### Code Quality
+
 **IMPORTANT**: Always run `uv run python -m ruff check . --fix && uv run python -m ruff format .` before committing.
 
 ### README.md Maintenance
+
 **IMPORTANT**: DO NOT modify README.md unless explicitly requested.
 
 ### No Pydantic
+
 The project deliberately removed `pydantic` as a dependency. Validation is done inline in `Khazad.__init__`.
 Do not reintroduce pydantic.
 
 ### No Separate Engine Class
+
 All cache logic (lookup, store, stats, key generation) lives in the `Khazad` class.
 Do not create a separate `CacheEngine` or orchestrator class.
 
 ### Python 3.10 Compatibility
+
 `requires-python = ">=3.10"` (ruff target py310). No 3.11+ stdlib APIs (`tomllib`,
 `StrEnum`, `asyncio.timeout`, exception groups). Every module starts with
 `from __future__ import annotations`. Dev venv is pinned to 3.13 via `.python-version`.
@@ -168,7 +182,7 @@ Do not create a separate `CacheEngine` or orchestrator class.
 
 ## Project Structure
 
-```
+```text
 khazad/
 ├── __init__.py           # Public API + module-level singleton (init/stop/get_stats/flush)
 ├── khazad.py             # Khazad class + PreparedRequest — all cache logic
@@ -230,7 +244,7 @@ docs/
 
 ## Cache Flow
 
-```
+```text
 Request → prepare(request)
   None → pass-through to real API (not counted in stats)
   PreparedRequest → embed(conversation) → VSIM in scope {host}/{model}
