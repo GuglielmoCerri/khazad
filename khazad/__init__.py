@@ -25,7 +25,7 @@ from typing import Literal
 from khazad._models import CacheHit, CacheScope, ParsedRequest, Stats
 from khazad.khazad import Khazad
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __all__ = [
     "CacheHit",
     "CacheScope",

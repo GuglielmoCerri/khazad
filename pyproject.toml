@@ -1,6 +1,6 @@
 [project]
 name = "khazad"
-version = "0.1.2"
+dynamic = ["version"]
 description = "Transparent, transport-layer semantic cache for LLM API calls using Redis 8 Vector Sets"
 readme = "README.md"
 license = "MIT"
@@ -54,6 +54,9 @@ examples = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "khazad/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["khazad"]
