@@ -8,7 +8,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/GuglielmoCerri/khazad/blob/main/LICENSE)
-[![Version 0.1.2](https://img.shields.io/badge/version-0.1.2-orange.svg)](https://github.com/GuglielmoCerri/khazad)
+[![PyPI version](https://img.shields.io/pypi/v/khazad?color=orange&label=version)](https://pypi.org/project/khazad/)
 [![Redis 8](https://img.shields.io/badge/Redis-8-red.svg)](https://redis.io/)
 
 *Transparent, transport-layer semantic cache for LLM API calls powered by Redis Vector Sets.*
