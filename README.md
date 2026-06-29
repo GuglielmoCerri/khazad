@@ -7,7 +7,7 @@
 <h2 align="center">Khazad — You shall not pass.</h2>
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/GuglielmoCerri/khazad/blob/main/LICENSE)
 [![Version 0.1.2](https://img.shields.io/badge/version-0.1.2-orange.svg)](https://github.com/GuglielmoCerri/khazad)
 [![Redis 8](https://img.shields.io/badge/Redis-8-red.svg)](https://redis.io/)
 
@@ -108,7 +108,7 @@ Available functions: `init()`, `stop()`, `get_stats()`, `flush()`, `is_active()`
 
 ### Examples
 
-Khazad activates once and intercepts **every** LLM SDK that uses `httpx` underneath, no per-provider wiring needed. For further examples see the [examples folder](examples).
+Khazad activates once and intercepts **every** LLM SDK that uses `httpx` underneath, no per-provider wiring needed. For further examples see the [examples folder](https://github.com/GuglielmoCerri/khazad/tree/main/examples).
 
 Pick the provider you use:
 
@@ -403,10 +403,10 @@ cache.get_stats().to_dict()
 
 ## Contributing
 
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Please read it before opening a pull request, as it covers the branching model, coding conventions, and the lint and test checks your changes are expected to pass.
+Contributions welcome — see [CONTRIBUTING.md](https://github.com/GuglielmoCerri/khazad/blob/main/CONTRIBUTING.md). Please read it before opening a pull request, as it covers the branching model, coding conventions, and the lint and test checks your changes are expected to pass.
 
 The unit and integration suites use fake embedders and mock transports, so the full test run needs neither a live Redis instance nor real API keys.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/GuglielmoCerri/khazad/blob/main/LICENSE)
