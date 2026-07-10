@@ -13,6 +13,23 @@
 
 *Transparent, transport-layer semantic cache for LLM API calls powered by Redis Vector Sets.*
 
+```
+$ uv run --group examples python -P examples/openai.py
+  [Khazad] HTTP transport patches installed
+  [Khazad] Initialized — threshold=0.90, embedder=huggingface
+  [Khazad] Cache flushed
+  [Khazad] Loading embedding model: redis/langcache-embed-v2
+  Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+  Loading weights: 100%|████████████████████████████████████████████████| 134/134 [00:00<00:00, 10758.95it/s]
+  [Khazad] CACHE MISS - Forwarding to API
+  [call 1] 7918.4ms — The capital of Spain is **Madrid**.
+  [Khazad] CACHE HIT - Similarity: 1.00 - Latency: 276ms
+  [call 2] 279.9ms — The capital of Spain is **Madrid**.
+  {'total_requests': 2, 'cache_hits': 1, 'cache_misses': 1, 'hit_rate': 0.5, 'avg_hit_similarity': 0.9996}
+  [Khazad] HTTP transport patches removed
+  [Khazad] Stopped — original HTTP transports restored
+```
+
 <p align="center"><b>~50% fewer API calls · ~96% faster on hits · ~50% lower spend · 100% transparent</b></p>
 <p align="center"><sub>Illustrative figures at a 0.50 hit rate (280ms cache replay vs. ~7900ms upstream call). Your numbers depend on traffic.</sub></p>
 
